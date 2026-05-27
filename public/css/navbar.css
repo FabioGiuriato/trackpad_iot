@@ -1,0 +1,119 @@
+.site-navbar {
+    min-height: 64px;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 18px;
+    padding: 0 24px;
+    background: #1b1d22;
+    border-bottom: 1px solid #30333a;
+}
+
+.site-logo {
+    color: #ff9f1c;
+    font-size: 18px;
+    font-weight: bold;
+    text-decoration: none;
+}
+
+.site-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.nav-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+    padding: 0 12px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: #aeb4c2;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.nav-link:hover,
+.nav-link.active {
+    border-color: #3b404c;
+    background: #252934;
+    color: #f5f5f5;
+}
+
+.user-area {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.user-area form {
+    margin: 0;
+}
+
+.user-badge,
+.user-icon-link {
+    min-height: 38px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px;
+    border: 1px solid #3b404c;
+    border-radius: 999px;
+    background: #252934;
+    color: #f5f5f5;
+    text-decoration: none;
+}
+
+.user-icon-link:hover,
+.user-icon-link.active {
+    border-color: #ff9f1c;
+}
+
+.user-icon {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.logout-button {
+    min-height: 36px;
+    padding: 0 12px;
+    border: 1px solid #3b404c;
+    border-radius: 6px;
+    background: transparent;
+    color: #aeb4c2;
+    cursor: pointer;
+    font: inherit;
+    font-weight: bold;
+}
+
+.logout-button:hover {
+    background: #252934;
+    color: #f5f5f5;
+}
+
+@media (max-width: 760px) {
+    .site-navbar {
+        grid-template-columns: 1fr;
+        align-items: flex-start;
+        padding: 14px;
+    }
+
+    .site-nav {
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .user-area {
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+}
