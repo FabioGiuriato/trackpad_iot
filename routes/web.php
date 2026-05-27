@@ -15,6 +15,7 @@ Route::get('/studio', [StudioController::class, 'index'])->middleware('auth')->n
 Route::get('/songs', [SongController::class, 'index'])->middleware('auth')->name('songs.index');
 Route::post('/songs', [SongController::class, 'store'])->middleware('auth')->name('songs.store');
 Route::put('/songs/{song}', [SongController::class, 'update'])->middleware('auth')->name('songs.update');
+Route::put('/songs/{song}/pattern', [SongController::class, 'updatePattern'])->middleware('auth')->name('songs.pattern.update');
 Route::delete('/songs/{song}', [SongController::class, 'destroy'])->middleware('auth')->name('songs.destroy');
 Route::get('/songs/{song}/play', [SongController::class, 'play'])->middleware('auth')->name('songs.play');
 

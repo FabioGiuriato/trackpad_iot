@@ -28,7 +28,8 @@
             <div class="meter-grid" id="latestMeters">
                 <div class="meter"><span>Potenziometro</span><strong>-</strong></div>
                 <div class="meter"><span>Volume master</span><strong>-</strong></div>
-                <div class="meter"><span>Joystick</span><strong>-</strong></div>
+                <div class="meter"><span>Joystick X</span><strong>-</strong></div>
+                <div class="meter"><span>Joystick Y</span><strong>-</strong></div>
                 <div class="meter"><span>Ora</span><strong>-</strong></div>
             </div>
             <p class="muted" id="iotStatus">In attesa del listener MQTT.</p>
@@ -55,7 +56,9 @@
     const buttonNames = @json($buttonNames);
     const mqttTopic = @json($mqttTopic);
     let lastEventId = Number(@json($latestEvent['id'] ?? 0));
-    const pollDelayMs = 180;
+    const pollDelayMs = 100;
+    const pollTimeoutMs = 1000;
+    let pollInFlight = false;
 
     function buttonState(value, label) {
         const name = buttonNames[label] || `Button ${label}`;
@@ -65,6 +68,8 @@
 
     function renderEvent(event) {
         const createdAt = new Date(event.created_at).toLocaleTimeString();
+        const joystickX = event.joystick_x_posizione ?? 'CENTRO';
+        const joystickY = event.joystick_y_posizione ?? 'CENTRO';
 
         return `
             <article class="event-row">
@@ -78,7 +83,7 @@
                         ${buttonState(event.button4, '4')}
                         ${buttonState(event.button5, '5')}
                     </div>
-                    <p class="muted">Potenziometro ${event.potenziometro} - Volume ${event.volume}% - Joystick ${event.joystick_x_posizione ?? 'CENTRO'} - Click ${event.joystick_click ?? 'NON_PREMUTO'}</p>
+                    <p class="muted">Potenziometro ${event.potenziometro} - Volume ${event.volume}% - Joystick X ${joystickX} - Y ${joystickY} - Click ${event.joystick_click ?? 'NON_PREMUTO'}</p>
                 </div>
                 <pre class="raw-json">${JSON.stringify(event.raw_payload, null, 2)}</pre>
             </article>
@@ -91,19 +96,32 @@
         }
 
         const createdAt = new Date(event.created_at).toLocaleTimeString();
+        const joystickX = event.joystick_x_posizione ?? 'CENTRO';
+        const joystickY = event.joystick_y_posizione ?? 'CENTRO';
 
         latestMeters.innerHTML = `
             <div class="meter"><span>Potenziometro</span><strong>${event.potenziometro}</strong></div>
             <div class="meter"><span>Volume master</span><strong>${event.volume}%</strong></div>
-            <div class="meter"><span>Joystick</span><strong>${event.joystick_x_posizione ?? 'CENTRO'}</strong></div>
+            <div class="meter"><span>Joystick X</span><strong>${joystickX}</strong></div>
+            <div class="meter"><span>Joystick Y</span><strong>${joystickY}</strong></div>
             <div class="meter"><span>Ora</span><strong>${createdAt}</strong></div>
         `;
     }
 
     async function loadEvents() {
+        if (pollInFlight) {
+            setTimeout(loadEvents, pollDelayMs);
+            return;
+        }
+
+        pollInFlight = true;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), pollTimeoutMs);
+
         try {
             const response = await fetch(`${latestEventsUrl}?after=${lastEventId}&t=${Date.now()}`, {
                 cache: 'no-store',
+                signal: controller.signal,
                 headers: {
                     'Accept': 'application/json',
                 },
@@ -118,30 +136,46 @@
                 statusText.textContent = 'Messaggi MQTT in arrivo.';
             }
         } catch (error) {
-            statusText.textContent = 'Listener MQTT non raggiungibile o server non attivo.';
+            if (error.name !== 'AbortError') {
+                statusText.textContent = 'Listener MQTT non raggiungibile o server non attivo.';
+            }
         } finally {
+            clearTimeout(timeoutId);
+            pollInFlight = false;
             setTimeout(loadEvents, pollDelayMs);
         }
     }
 
     async function loadInitialEvent() {
-        const response = await fetch(`${latestEventsUrl}?t=${Date.now()}`, {
-            cache: 'no-store',
-            headers: {
-                'Accept': 'application/json',
-            },
-        });
-        const data = await response.json();
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), pollTimeoutMs);
 
-        if (data.events.length > 0) {
-            const event = data.events[0];
-            latestEventCard.innerHTML = renderEvent(event);
-            updateMeters(event);
-            lastEventId = Number(event.id);
+        try {
+            const response = await fetch(`${latestEventsUrl}?t=${Date.now()}`, {
+                cache: 'no-store',
+                signal: controller.signal,
+                headers: {
+                    'Accept': 'application/json',
+                },
+            });
+            const data = await response.json();
+
+            if (data.events.length > 0) {
+                const event = data.events[0];
+                latestEventCard.innerHTML = renderEvent(event);
+                updateMeters(event);
+                lastEventId = Number(event.id);
+            }
+        } catch (error) {
+            if (error.name !== 'AbortError') {
+                statusText.textContent = 'Listener MQTT non raggiungibile o server non attivo.';
+            }
+        } finally {
+            clearTimeout(timeoutId);
         }
     }
 
-    loadInitialEvent().finally(loadEvents);
+    loadInitialEvent().finally(() => setTimeout(loadEvents, pollDelayMs));
 </script>
 </body>
 </html>

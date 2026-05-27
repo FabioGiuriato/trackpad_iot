@@ -9,26 +9,71 @@ class LatestDeviceEventStore
 {
     public function latest(): ?array
     {
-        if (!File::exists($this->path())) {
-            return null;
-        }
-
-        $event = json_decode(File::get($this->path()), true);
-
-        return is_array($event) ? $event : null;
+        return $this->withLock(LOCK_SH, fn () => $this->readLatestFromDisk());
     }
 
     public function put(array $event): array
     {
-        $previous = $this->latest();
-        $event['id'] = (int) ($previous['id'] ?? 0) + 1;
-        $event['counters'] = $this->nextCounters($event, $previous);
-        $event['created_at'] = now()->toISOString();
+        return $this->withLock(LOCK_EX, function () use ($event) {
+            $previous = $this->readLatestFromDisk();
+            $event['id'] = (int) ($previous['id'] ?? 0) + 1;
+            $event['counters'] = $this->nextCounters($event, $previous);
+            $event['created_at'] = now()->toISOString();
 
-        File::ensureDirectoryExists(dirname($this->path()));
-        File::put($this->path(), json_encode($event, JSON_PRETTY_PRINT), true);
+            file_put_contents($this->path(), json_encode($event, JSON_UNESCAPED_SLASHES));
 
-        return $event;
+            return $event;
+        });
+    }
+
+    private function readLatestFromDisk(): ?array
+    {
+        $path = $this->path();
+
+        if (!File::exists($path)) {
+            return null;
+        }
+
+        for ($attempt = 0; $attempt < 3; $attempt++) {
+            $contents = @file_get_contents($path);
+
+            if ($contents === false || $contents === '') {
+                usleep(2000);
+                continue;
+            }
+
+            $event = json_decode($contents, true);
+
+            if (is_array($event)) {
+                return $event;
+            }
+
+            usleep(2000);
+        }
+
+        return null;
+    }
+
+    private function withLock(int $operation, callable $callback): mixed
+    {
+        $path = $this->path();
+
+        File::ensureDirectoryExists(dirname($path));
+
+        $lock = fopen($this->lockPath(), 'c');
+
+        if (!$lock) {
+            return $callback();
+        }
+
+        try {
+            flock($lock, $operation);
+
+            return $callback();
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
     }
 
     private function nextCounters(array $event, ?array $previous): array
@@ -43,6 +88,8 @@ class LatestDeviceEventStore
             ],
             'joystick_left' => 0,
             'joystick_right' => 0,
+            'joystick_up' => 0,
+            'joystick_down' => 0,
             'joystick_click' => 0,
         ];
 
@@ -66,6 +113,17 @@ class LatestDeviceEventStore
             $counters['joystick_right'] = (int) ($counters['joystick_right'] ?? 0) + 1;
         }
 
+        $currentVerticalDirection = Str::upper($event['joystick_y_posizione'] ?? $event['joystick_y_position'] ?? 'CENTRO');
+        $previousVerticalDirection = Str::upper($previous['joystick_y_posizione'] ?? $previous['joystick_y_position'] ?? 'CENTRO');
+
+        if ($currentVerticalDirection !== $previousVerticalDirection && in_array($currentVerticalDirection, ['SOPRA', 'SU', 'UP', 'ALTO'], true)) {
+            $counters['joystick_up'] = (int) ($counters['joystick_up'] ?? 0) + 1;
+        }
+
+        if ($currentVerticalDirection !== $previousVerticalDirection && in_array($currentVerticalDirection, ['SOTTO', 'GIU', 'GIU\'', 'DOWN', 'BASSO'], true)) {
+            $counters['joystick_down'] = (int) ($counters['joystick_down'] ?? 0) + 1;
+        }
+
         if ($this->isPressed($event['joystick_click'] ?? null) && !$this->isPressed($previous['joystick_click'] ?? null)) {
             $counters['joystick_click'] = (int) ($counters['joystick_click'] ?? 0) + 1;
         }
@@ -83,5 +141,10 @@ class LatestDeviceEventStore
     private function path(): string
     {
         return storage_path('app/trackpad/latest-device-event.json');
+    }
+
+    private function lockPath(): string
+    {
+        return storage_path('app/trackpad/latest-device-event.lock');
     }
 }

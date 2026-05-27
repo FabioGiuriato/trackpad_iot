@@ -3,8 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Button;
 use App\Models\Song;
+use App\Models\UserButtonMapping;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class SongApiController extends Controller
 {
@@ -36,6 +39,7 @@ class SongApiController extends Controller
         }
 
         $song->load(['events.button']);
+        $buttons = $this->availableButtons($request);
 
         $events = $song->events
             ->sortBy('time_ms')
@@ -50,22 +54,22 @@ class SongApiController extends Controller
                 ];
             });
 
-        $channels = $song->events
+        $stepsByButtonId = $song->events
             ->groupBy('button_id')
-            ->map(function ($events) {
-                $firstEvent = $events->first();
+            ->map(fn ($events) => $events
+                ->map(fn ($event) => (int) round($event->time_ms / 125))
+                ->unique()
+                ->sort()
+                ->values()
+            );
 
-                return [
-                    'button_id' => $firstEvent->button_id,
-                    'sound' => $this->buttonPayload($firstEvent->button),
-                    'steps' => $events
-                        ->map(fn ($event) => (int) round($event->time_ms / 125))
-                        ->unique()
-                        ->sort()
-                        ->values(),
-                ];
-            })
-            ->values();
+        $channels = $buttons
+            ->values()
+            ->map(fn ($button) => [
+                'button_id' => $button->id,
+                'sound' => $this->buttonPayload($button),
+                'steps' => $stepsByButtonId->get($button->id, collect())->values()->all(),
+            ]);
 
         $maxStep = $events->max('step') ?? 0;
         $stepCount = min(256, max(16, (int) ceil(($maxStep + 1) / 16) * 16));
@@ -84,6 +88,36 @@ class SongApiController extends Controller
         ]);
     }
 
+    public function update(Request $request, Song $song)
+    {
+        if ((int) $song->user_id !== (int) $request->user()->id) {
+            abort(403);
+        }
+
+        $data = $request->validate([
+            'bpm' => ['required', 'integer', 'min:60', 'max:200'],
+            'events' => ['present', 'array'],
+            'events.*.button_id' => ['required', 'integer', 'exists:buttons,id'],
+            'events.*.time_ms' => ['required', 'integer', 'min:0'],
+        ]);
+
+        DB::transaction(function () use ($song, $data) {
+            $song->update([
+                'bpm' => $data['bpm'],
+            ]);
+
+            $song->events()->delete();
+
+            if (!empty($data['events'])) {
+                $song->events()->createMany($data['events']);
+            }
+        });
+
+        return response()->json([
+            'message' => 'Canzone aggiornata correttamente.',
+        ]);
+    }
+
     private function buttonPayload($button): ?array
     {
         if (!$button) {
@@ -99,5 +133,22 @@ class SongApiController extends Controller
             'type_label' => $button->type_name,
             'name' => ucfirst(str_replace('_', ' ', pathinfo(basename($button->sound_file), PATHINFO_FILENAME))),
         ];
+    }
+
+    private function availableButtons(Request $request)
+    {
+        $customizableType = config('trackpad.customizable_type');
+        $customButtons = UserButtonMapping::buttonsFor($request->user());
+
+        return collect(config('trackpad.types'))
+            ->keys()
+            ->flatMap(function ($type) use ($customizableType, $customButtons) {
+                if ((int) $type === (int) $customizableType) {
+                    return $customButtons;
+                }
+
+                return Button::where('tipo', $type)->orderBy('id')->get();
+            })
+            ->values();
     }
 }

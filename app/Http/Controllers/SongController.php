@@ -90,6 +90,35 @@ class SongController extends Controller
         return redirect()->route('songs.index')->with('status', 'Canzone rinominata correttamente.');
     }
 
+    public function updatePattern(Request $request, Song $song)
+    {
+        $this->authorizeSong($song);
+
+        $data = $request->validate([
+            'bpm' => ['required', 'integer', 'min:60', 'max:200'],
+            'events' => ['present', 'array'],
+            'events.*.button_id' => ['required', 'integer', 'exists:buttons,id'],
+            'events.*.time_ms' => ['required', 'integer', 'min:0'],
+        ]);
+
+        DB::transaction(function () use ($song, $data) {
+            $song->update([
+                'bpm' => $data['bpm'],
+            ]);
+
+            $song->events()->delete();
+
+            if (!empty($data['events'])) {
+                $song->events()->createMany($data['events']);
+            }
+        });
+
+        return response()->json([
+            'message' => 'Canzone aggiornata correttamente.',
+            'song_id' => $song->id,
+        ]);
+    }
+
     public function destroy(Song $song)
     {
         $this->authorizeSong($song);

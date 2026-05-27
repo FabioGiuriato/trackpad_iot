@@ -16,6 +16,7 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/songs', [SongApiController::class, 'index']);
         Route::get('/songs/{song}', [SongApiController::class, 'show']);
+        Route::put('/songs/{song}', [SongApiController::class, 'update']);
 
         Route::get('/mqtt/latest', [DeviceApiController::class, 'latest']);
         Route::get('/types', [TypeApiController::class, 'index']);

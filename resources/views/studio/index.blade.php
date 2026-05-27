@@ -214,7 +214,9 @@
     const musicTypes = @json($musicTypes);
     const musicTypeValues = Object.keys(musicTypes).map(Number).sort((a, b) => a - b);
     const defaultType = String(@json($defaultType));
+    const selectedSongId = @json($selectedSong?->id);
     const saveSongUrl = @json(route('songs.store'));
+    const updateSongPatternUrl = @json($selectedSong ? route('songs.pattern.update', $selectedSong) : null);
     const latestEventsUrl = @json(route('iot.events.latest'));
     const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 
@@ -225,12 +227,15 @@
     const savedStepDurationMs = 125;
 
     let currentStep = 0;
+    let selectedStep = 0;
     let stepCount = defaultStepCount;
     let timer = null;
     let isPlaying = false;
     let lastDeviceEventId = Number(@json($latestDeviceEventId));
     let previousDeviceCounters = normalizeDeviceCounters(@json($latestDeviceCounters));
-    const devicePollDelayMs = 120;
+    const devicePollDelayMs = 100;
+    const devicePollTimeoutMs = 1000;
+    let devicePollInFlight = false;
 
     function getSelectedSoundType() {
         if (!soundTypeFilter) {
@@ -323,6 +328,7 @@
     async function saveSong() {
         const title = songTitleInput.value.trim();
         const events = getSongEventsForSave();
+        const isUpdatingLoadedSong = Boolean(selectedSongId && updateSongPatternUrl);
 
         if (!title) {
             statusText.textContent = 'Inserisci il nome della canzone';
@@ -330,7 +336,7 @@
             return;
         }
 
-        if (events.length === 0) {
+        if (!isUpdatingLoadedSong && events.length === 0) {
             statusText.textContent = 'Attiva almeno uno step prima di salvare';
             return;
         }
@@ -339,8 +345,8 @@
         saveSongBtn.textContent = 'Salvataggio...';
 
         try {
-            const response = await fetch(saveSongUrl, {
-                method: 'POST',
+            const response = await fetch(isUpdatingLoadedSong ? updateSongPatternUrl : saveSongUrl, {
+                method: isUpdatingLoadedSong ? 'PUT' : 'POST',
                 headers: {
                     'Accept': 'application/json',
                     'Content-Type': 'application/json',
@@ -361,7 +367,10 @@
             }
 
             statusText.textContent = data.message;
-            window.location.href = data.redirect;
+
+            if (data.redirect) {
+                window.location.href = data.redirect;
+            }
         } catch (error) {
             statusText.textContent = 'Errore di rete durante il salvataggio';
         } finally {
@@ -389,6 +398,7 @@
     function renderRackSteps(nextStepCount, activePattern = getActivePattern()) {
         stepCount = Math.min(Math.max(nextStepCount, defaultStepCount), maxStepCount);
         currentStep = currentStep >= stepCount ? 0 : currentStep;
+        selectedStep = clamp(selectedStep, 0, stepCount - 1);
 
         rackHeader.querySelectorAll('.step-label').forEach((label) => {
             label.remove();
@@ -398,6 +408,7 @@
             const label = document.createElement('div');
             label.className = 'step-label';
             label.textContent = step;
+            label.dataset.step = step - 1;
             rackHeader.appendChild(label);
         }
 
@@ -420,6 +431,8 @@
                 }
 
                 button.addEventListener('click', () => {
+                    selectedStep = step;
+                    updateSelectedStepView();
                     button.classList.toggle('active');
                 });
 
@@ -432,6 +445,22 @@
         if (stepCountInput) {
             stepCountInput.value = String(stepCount);
         }
+
+        updateSelectedStepView();
+    }
+
+    function updateSelectedStepView() {
+        document.querySelectorAll('.step.selected-step, .step-label.selected-step').forEach((element) => {
+            element.classList.remove('selected-step');
+        });
+
+        document.querySelectorAll(`[data-step="${selectedStep}"]`).forEach((element) => {
+            if (element.classList.contains('step') || element.classList.contains('step-label')) {
+                element.classList.add('selected-step');
+            }
+        });
+
+        statusText.textContent = `Step selezionato: ${selectedStep + 1}`;
     }
 
     function updateTransportView() {
@@ -626,14 +655,20 @@
         statusText.textContent = `Tipo selezionato: ${musicTypes[nextType]}`;
     }
 
-    function getRecordingStep() {
-        const playhead = document.querySelector('.step.playhead');
+    function moveSelectedStep(delta) {
+        let nextStep = selectedStep + delta;
 
-        if (playhead) {
-            return Number(playhead.dataset.step);
+        if (nextStep >= stepCount && stepCount < maxStepCount) {
+            renderRackSteps(stepCount + 16);
+            nextStep = selectedStep + delta;
         }
 
-        return currentStep;
+        selectedStep = clamp(nextStep, 0, stepCount - 1);
+        updateSelectedStepView();
+    }
+
+    function getRecordingStep() {
+        return selectedStep;
     }
 
     function getPadByTypeAndSlot(type, slot) {
@@ -676,6 +711,8 @@
             },
             joystickLeft: Number(counters.joystick_left ?? 0),
             joystickRight: Number(counters.joystick_right ?? 0),
+            joystickUp: Number(counters.joystick_up ?? 0),
+            joystickDown: Number(counters.joystick_down ?? 0),
             joystickClick: Number(counters.joystick_click ?? 0),
         };
     }
@@ -693,6 +730,14 @@
             changeSoundType(1);
         }
 
+        if (counters.joystickUp > previousDeviceCounters.joystickUp) {
+            moveSelectedStep(-1);
+        }
+
+        if (counters.joystickDown > previousDeviceCounters.joystickDown) {
+            moveSelectedStep(1);
+        }
+
         if (counters.joystickClick > previousDeviceCounters.joystickClick) {
             toggleSequencer();
         }
@@ -707,9 +752,19 @@
     }
 
     async function pollDeviceEvents() {
+        if (devicePollInFlight) {
+            setTimeout(pollDeviceEvents, devicePollDelayMs);
+            return;
+        }
+
+        devicePollInFlight = true;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), devicePollTimeoutMs);
+
         try {
             const response = await fetch(`${latestEventsUrl}?after=${lastDeviceEventId}&t=${Date.now()}`, {
                 cache: 'no-store',
+                signal: controller.signal,
                 headers: {
                     'Accept': 'application/json',
                 },
@@ -723,11 +778,15 @@
 
             data.events.forEach((event) => {
                 processDeviceEvent(event);
-                lastDeviceEventId = Math.max(lastDeviceEventId, Number(event.id));
+                lastDeviceEventId = Number(event.id);
             });
         } catch (error) {
-            statusText.textContent = 'Connessione live ESP32 non disponibile';
+            if (error.name !== 'AbortError') {
+                statusText.textContent = 'Connessione live ESP32 non disponibile';
+            }
         } finally {
+            clearTimeout(timeoutId);
+            devicePollInFlight = false;
             setTimeout(pollDeviceEvents, devicePollDelayMs);
         }
     }

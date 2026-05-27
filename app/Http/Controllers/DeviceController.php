@@ -34,7 +34,7 @@ class DeviceController extends Controller
     {
         $latestEvent = app(LatestDeviceEventStore::class)->latest();
 
-        if (!$latestEvent || ($request->filled('after') && (int) $latestEvent['id'] <= $request->integer('after'))) {
+        if (!$latestEvent || ($request->filled('after') && (int) $latestEvent['id'] === $request->integer('after'))) {
             return response()
                 ->json(['events' => []])
                 ->header('Cache-Control', 'no-store');
@@ -56,6 +56,10 @@ class DeviceController extends Controller
             'levetta' => ['nullable', 'integer'],
             'joystick_x_valore' => ['nullable', 'integer'],
             'joystick_x_posizione' => ['nullable', 'string', 'max:20'],
+            'joystick_y_valore' => ['nullable', 'integer'],
+            'joystick_y_posizione' => ['nullable', 'string', 'max:20'],
+            'joystick_y_value' => ['nullable', 'integer'],
+            'joystick_y_position' => ['nullable', 'string', 'max:20'],
             'joystick_click' => ['nullable', 'string', 'max:30'],
             'button1' => ['required', 'integer', 'in:0,1'],
             'button2' => ['required', 'integer', 'in:0,1'],
@@ -85,6 +89,8 @@ class DeviceController extends Controller
             'levetta' => $data['levetta'] ?? 0,
             'joystick_x_valore' => $data['joystick_x_valore'] ?? null,
             'joystick_x_posizione' => $data['joystick_x_posizione'] ?? null,
+            'joystick_y_valore' => $data['joystick_y_valore'] ?? $data['joystick_y_value'] ?? null,
+            'joystick_y_posizione' => $data['joystick_y_posizione'] ?? $data['joystick_y_position'] ?? null,
             'joystick_click' => $data['joystick_click'] ?? null,
             'button1' => $data['button1'],
             'button2' => $data['button2'],

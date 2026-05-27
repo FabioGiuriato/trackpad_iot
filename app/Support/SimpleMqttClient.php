@@ -90,6 +90,17 @@ class SimpleMqttClient
         if (!$packet || $packet['type'] !== 9) {
             throw new RuntimeException('SUBACK MQTT non ricevuto.');
         }
+
+        $grantedQos = ord(substr($packet['body'], -1));
+
+        if ($grantedQos === 0x80) {
+            throw new RuntimeException("Subscribe MQTT rifiutata per il topic {$topic}.");
+        }
+    }
+
+    public function publish(string $topic, string $payload): void
+    {
+        $this->writePacket(0x30, $this->encodeString($topic) . $payload);
     }
 
     public function listen(callable $onMessage): void
@@ -99,22 +110,18 @@ class SimpleMqttClient
         while (true) {
             $packet = $this->readPacket(false);
 
-            if (!$packet) {
-                if (time() - $lastPingAt >= max(10, $this->keepAlive - 10)) {
-                    $this->writePacket(0xC0, '');
-                    $lastPingAt = time();
-                }
-
-                continue;
-            }
-
-            if ($packet['type'] === 3) {
+            if ($packet && $packet['type'] === 3) {
                 [$topic, $payload] = $this->decodePublish($packet);
                 $onMessage($topic, $payload);
             }
 
-            if ($packet['type'] === 14) {
+            if ($packet && $packet['type'] === 14) {
                 throw new RuntimeException('Il broker MQTT ha chiuso la connessione.');
+            }
+
+            if (time() - $lastPingAt >= max(5, intdiv($this->keepAlive, 2))) {
+                $this->writePacket(0xC0, '');
+                $lastPingAt = time();
             }
         }
     }

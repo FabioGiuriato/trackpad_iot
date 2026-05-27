@@ -17,7 +17,8 @@
         <p class="muted">
             Potenziometro {{ data_get($event, 'potenziometro') }}
             - Volume {{ data_get($event, 'volume') }}%
-            - Joystick {{ data_get($event, 'joystick_x_posizione', 'CENTRO') }}
+            - Joystick X {{ data_get($event, 'joystick_x_posizione', 'CENTRO') }}
+            - Y {{ data_get($event, 'joystick_y_posizione', 'CENTRO') }}
             - Click {{ data_get($event, 'joystick_click', 'NON_PREMUTO') }}
         </p>
     </div>

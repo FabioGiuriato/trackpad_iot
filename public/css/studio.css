@@ -359,6 +359,16 @@ body {
     outline: 2px solid #ff9f1c;
 }
 
+.step.selected-step,
+.step-label.selected-step {
+    box-shadow: 0 0 0 2px #ff4d4d, 0 0 18px rgba(255, 77, 77, 0.35);
+}
+
+.step-label.selected-step {
+    color: #ff9f1c;
+    font-weight: bold;
+}
+
 .step-label {
     text-align: center;
 }

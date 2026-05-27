@@ -46,7 +46,7 @@
 
         <article class="card">
             <h2>JSON atteso</h2>
-            <pre class="raw-json">{"button1":0,"button2":0,"button3":0,"button4":0,"button5":0,"potenziometro":3145,"pot_percentuale":76,"joystick_x_valore":1936,"joystick_x_posizione":"CENTRO","joystick_click":"NON_PREMUTO"}</pre>
+            <pre class="raw-json">{"button1":0,"button2":0,"button3":0,"button4":0,"button5":0,"potenziometro":3145,"pot_percentuale":76,"joystick_x_valore":1936,"joystick_x_posizione":"CENTRO","joystick_y_valore":1943,"joystick_y_posizione":"CENTRO","joystick_click":"NON_PREMUTO"}</pre>
             <p class="muted">Topic MQTT: <strong>{{ $mqttTopic }}</strong></p>
             <p class="muted">I 5 bottoni fisici vengono collegati ai 5 suoni del tipo selezionato nello Studio.</p>
         </article>
@@ -58,7 +58,8 @@
             <div class="meter-grid">
                 <div class="meter"><span>Potenziometro</span><strong>{{ data_get($latestEvent, 'potenziometro') }}</strong></div>
                 <div class="meter"><span>Volume master</span><strong>{{ data_get($latestEvent, 'volume') }}%</strong></div>
-                <div class="meter"><span>Joystick</span><strong>{{ data_get($latestEvent, 'joystick_x_posizione', 'CENTRO') }}</strong></div>
+                <div class="meter"><span>Joystick X</span><strong>{{ data_get($latestEvent, 'joystick_x_posizione', 'CENTRO') }}</strong></div>
+                <div class="meter"><span>Joystick Y</span><strong>{{ data_get($latestEvent, 'joystick_y_posizione', 'CENTRO') }}</strong></div>
                 <div class="meter"><span>Ora</span><strong>{{ \Illuminate\Support\Carbon::parse(data_get($latestEvent, 'created_at'))->format('H:i:s') }}</strong></div>
             </div>
         </section>
