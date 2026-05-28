@@ -79,6 +79,7 @@ class StudioController extends Controller
             'defaultType' => $defaultType,
             'latestDeviceEventId' => $latestDeviceEvent['id'] ?? 0,
             'latestDeviceCounters' => $latestDeviceEvent['counters'] ?? [],
+            'latestDeviceJoystickX' => $latestDeviceEvent['joystick_x_posizione'] ?? 'CENTRO',
         ]);
     }
 }

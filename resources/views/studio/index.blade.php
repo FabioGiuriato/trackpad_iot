@@ -231,8 +231,10 @@
     let stepCount = defaultStepCount;
     let timer = null;
     let isPlaying = false;
+    const activeAudios = new Set();
     let lastDeviceEventId = Number(@json($latestDeviceEventId));
     let previousDeviceCounters = normalizeDeviceCounters(@json($latestDeviceCounters));
+    let previousDeviceJoystickX = normalizeJoystickDirection(@json($latestDeviceJoystickX));
     const devicePollDelayMs = 100;
     const devicePollTimeoutMs = 1000;
     let devicePollInFlight = false;
@@ -523,13 +525,38 @@
 
         const audio = new Audio(pad.dataset.sound);
         audio.volume = Number(volumeInput.value) * getChannelVolume(channelIndex);
-        audio.play();
+        activeAudios.add(audio);
+        audio.addEventListener('ended', () => activeAudios.delete(audio), { once: true });
+        audio.addEventListener('error', () => activeAudios.delete(audio), { once: true });
+
+        const playPromise = audio.play();
+
+        if (playPromise) {
+            playPromise.catch(() => activeAudios.delete(audio));
+        }
 
         pad.classList.add('playing');
 
         setTimeout(() => {
             pad.classList.remove('playing');
         }, 120);
+    }
+
+    function stopActiveAudio() {
+        activeAudios.forEach((audio) => {
+            audio.pause();
+
+            try {
+                audio.currentTime = 0;
+            } catch (error) {
+                // Alcuni browser bloccano currentTime se il file non e ancora pronto.
+            }
+        });
+
+        activeAudios.clear();
+        document.querySelectorAll('.pad.playing').forEach((pad) => {
+            pad.classList.remove('playing');
+        });
     }
 
     function clearPlayhead() {
@@ -582,6 +609,7 @@
     function pauseSequencer() {
         isPlaying = false;
         clearInterval(timer);
+        stopActiveAudio();
         updateTransportView();
     }
 
@@ -655,6 +683,26 @@
         statusText.textContent = `Tipo selezionato: ${musicTypes[nextType]}`;
     }
 
+    function normalizeJoystickDirection(direction) {
+        return String(direction ?? 'CENTRO').trim().toUpperCase();
+    }
+
+    function processJoystickXDirection(event, alreadyHandledByCounters) {
+        const currentDirection = normalizeJoystickDirection(event.joystick_x_posizione ?? event.joystick_x_position ?? 'CENTRO');
+
+        if (!alreadyHandledByCounters && currentDirection !== previousDeviceJoystickX) {
+            if (['SINISTRA', 'LEFT'].includes(currentDirection)) {
+                changeSoundType(-1);
+            }
+
+            if (['DESTRA', 'RIGHT'].includes(currentDirection)) {
+                changeSoundType(1);
+            }
+        }
+
+        previousDeviceJoystickX = currentDirection;
+    }
+
     function moveSelectedStep(delta) {
         let nextStep = selectedStep + delta;
 
@@ -719,16 +767,21 @@
 
     function processDeviceEvent(event) {
         const counters = normalizeDeviceCounters(event.counters);
+        let soundTypeChangedByCounters = false;
 
         setMasterVolumeFromDevice(event);
 
         if (counters.joystickLeft > previousDeviceCounters.joystickLeft) {
             changeSoundType(-1);
+            soundTypeChangedByCounters = true;
         }
 
         if (counters.joystickRight > previousDeviceCounters.joystickRight) {
             changeSoundType(1);
+            soundTypeChangedByCounters = true;
         }
+
+        processJoystickXDirection(event, soundTypeChangedByCounters);
 
         if (counters.joystickUp > previousDeviceCounters.joystickUp) {
             moveSelectedStep(-1);
