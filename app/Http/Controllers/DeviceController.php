@@ -9,16 +9,6 @@ use Illuminate\Support\Facades\Validator;
 
 class DeviceController extends Controller
 {
-    public function index()
-    {
-        $latestEvent = app(LatestDeviceEventStore::class)->latest();
-
-        return view('iot.device', [
-            'latestEvent' => $latestEvent,
-            'mqttTopic' => $this->mqttTopic(),
-        ]);
-    }
-
     public function live()
     {
         $latestEvent = app(LatestDeviceEventStore::class)->latest();

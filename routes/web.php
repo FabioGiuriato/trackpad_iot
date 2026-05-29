@@ -33,7 +33,6 @@ Route::get('/profile', [ProfileController::class, 'show'])->middleware('auth')->
 Route::put('/profile', [ProfileController::class, 'update'])->middleware('auth')->name('profile.update');
 Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->middleware('auth')->name('profile.password');
 
-Route::get('/iot/device', [DeviceController::class, 'index'])->middleware('auth')->name('iot.device');
 Route::get('/iot/live', [DeviceController::class, 'live'])->middleware('auth')->name('iot.live');
 Route::get('/iot/events/latest', [DeviceController::class, 'latestEvents'])->middleware('auth')->name('iot.events.latest');
 Route::post('/iot/events', [DeviceController::class, 'storeEvent'])->name('iot.events.store');

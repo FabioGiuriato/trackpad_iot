@@ -19,7 +19,6 @@
             <p>Qui vedrai in tempo reale i messaggi JSON mandati dal dispositivo sul topic <strong>{{ $mqttTopic }}</strong>. I bottoni fisici lavorano sul tipo selezionato nello Studio.</p>
         </div>
 
-        <a class="link-button secondary" href="{{ route('iot.device') }}">Dispositivo IoT</a>
     </section>
 
     <section class="grid">
